@@ -3,6 +3,11 @@ name: Reusable Paper Static Check
 on:
   workflow_call:
     inputs:
+      checker_ref:
+        description: "Ref (branch/tag/SHA) of pssg-paper-checker to run"
+        required: false
+        type: string
+        default: "main"
       latex_root:
         description: "LaTeX project root in caller repository"
         required: false
@@ -24,8 +29,8 @@ jobs:
       - name: Checkout checker repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.action_repository }}
-          ref: ${{ github.action_ref }}
+          repository: hpcgroup/pssg-paper-checker
+          ref: ${{ inputs.checker_ref }}
           path: _paper_checker
 
       - name: Set up Python
