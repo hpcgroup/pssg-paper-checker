@@ -56,6 +56,23 @@ jobs:
             --output-md "_paper_check_reports/report.md" \
             $STRICT_FLAG
 
+      - name: Publish report to run summary
+        if: always()
+        run: |
+          {
+            echo "## Paper Static Check"
+            echo ""
+            echo "- Repository: \`${{ github.repository }}\`"
+            echo "- Ref: \`${{ github.ref_name }}\`"
+            echo "- strict: \`${{ inputs.strict }}\`"
+            echo ""
+            if [ -f "_paper_check_reports/report.md" ]; then
+              cat "_paper_check_reports/report.md"
+            else
+              echo "_Report file not found. Check previous step logs._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload static check reports
         if: always()
         uses: actions/upload-artifact@v4
