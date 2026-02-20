@@ -1,0 +1,59 @@
+name: Reusable Paper Static Check
+
+on:
+  workflow_call:
+    inputs:
+      latex_root:
+        description: "LaTeX project root in caller repository"
+        required: false
+        type: string
+        default: "."
+      strict:
+        description: "Fail job when static checks fail"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  static-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
+
+      - name: Checkout checker repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.action_repository }}
+          ref: ${{ github.action_ref }}
+          path: _paper_checker
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install checker dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r _paper_checker/requirements.txt
+
+      - name: Run static paper checks
+        run: |
+          mkdir -p _paper_check_reports
+          STRICT_FLAG=""
+          if [ "${{ inputs.strict }}" = "true" ]; then
+            STRICT_FLAG="--fail-on-static-error"
+          fi
+          python _paper_checker/paper_check_static.py \
+            --latex "${{ inputs.latex_root }}" \
+            --output-json "_paper_check_reports/report.json" \
+            --output-md "_paper_check_reports/report.md" \
+            $STRICT_FLAG
+
+      - name: Upload static check reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-static-check-report
+          path: _paper_check_reports/
