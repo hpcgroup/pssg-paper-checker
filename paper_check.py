@@ -1019,7 +1019,7 @@ class ChecklistEvaluator:
                     )
                 if "zai_text" not in self._clients:
                     self._clients["zai_text"] = OpenAI(
-                        api_key=api_key, base_url="https://api.z.ai/api/paas/v4"
+                        api_key=api_key, base_url="https://api.z.ai/api/coding/paas/v4"
                     )
                 response = self._clients["zai_text"].chat.completions.create(
                     model="GLM-4.7",
