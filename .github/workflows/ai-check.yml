@@ -74,19 +74,22 @@ jobs:
           eval $CMD 2>&1 | tee _paper_check_reports/output.txt
           # Copy the generated markdown report
           cp *_quality_report.md _paper_check_reports/ 2>/dev/null || true
-          # Extract JSON from output (the report is printed as JSON)
-          python -c "
-import re, sys, json
-text = open('_paper_check_reports/output.txt').read()
-# Find JSON array/object in output
-match = re.search(r'(\{[\s\S]*\"result\"[\s\S]*\})', text)
-if match:
-    try:
-        data = json.loads(match.group(1))
-        json.dump(data, open('_paper_check_reports/report.json', 'w'), indent=2)
-    except:
-        pass
-"
+
+      - name: Extract JSON from output
+        run: |
+          python << 'PYTHON_SCRIPT'
+          import re, json
+          with open('_paper_check_reports/output.txt') as f:
+              text = f.read()
+          match = re.search(r'(\{[\s\S]*"result"[\s\S]*\})', text)
+          if match:
+              try:
+                  data = json.loads(match.group(1))
+                  with open('_paper_check_reports/report.json', 'w') as f:
+                      json.dump(data, f, indent=2)
+              except:
+                  pass
+          PYTHON_SCRIPT
 
       - name: Publish report to run summary
         if: always()
