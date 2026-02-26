@@ -7,7 +7,7 @@ on:
         description: "Ref (branch/tag/SHA) of pssg-paper-checker to run"
         required: false
         type: string
-        default: "main"
+        default: "ai-check"
       latex_root:
         description: "LaTeX project root in caller repository"
         required: false
@@ -32,6 +32,12 @@ jobs:
           repository: hpcgroup/pssg-paper-checker
           ref: ${{ inputs.checker_ref }}
           path: _paper_checker
+          fetch-depth: 0
+
+      - name: Debug checkout
+        run: |
+          ls -la _paper_checker/
+          ls -la _paper_checker/*.py 2>/dev/null || echo "No python files found"
 
       - name: Set up Python
         uses: actions/setup-python@v5
