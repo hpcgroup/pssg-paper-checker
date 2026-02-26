@@ -1,0 +1,120 @@
+name: Reusable Paper AI Check
+
+on:
+  workflow_call:
+    inputs:
+      checker_ref:
+        description: "Ref (branch/tag/SHA) of pssg-paper-checker to run"
+        required: false
+        type: string
+        default: "main"
+      latex_root:
+        description: "LaTeX project root in caller repository"
+        required: false
+        type: string
+        default: "."
+      pdf_path:
+        description: "Path to PDF file (relative to latex_root). If empty, runs text-based AI checks only."
+        required: false
+        type: string
+        default: ""
+      model:
+        description: "LLM model to use"
+        required: false
+        type: string
+        default: "GLM-4.7"
+      strict:
+        description: "Fail job when AI checks fail"
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      api_key:
+        description: "API key for the LLM provider"
+        required: false
+
+jobs:
+  ai-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
+
+      - name: Checkout checker repository
+        uses: actions/checkout@v4
+        with:
+          repository: hpcgroup/pssg-paper-checker
+          ref: ${{ inputs.checker_ref }}
+          path: _paper_checker
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install checker dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r _paper_checker/requirements.txt
+
+      - name: Run AI paper checks
+        env:
+          ZAI_API_KEY: ${{ secrets.api_key }}
+        run: |
+          mkdir -p _paper_check_reports
+          # Build command
+          CMD="python _paper_checker/paper_check.py --latex '${{ inputs.latex_root }}' --model '${{ inputs.model }}'"
+          if [ -n "${{ inputs.pdf_path }}" ]; then
+            CMD="$CMD --pdf '${{ inputs.latex_root }}/${{ inputs.pdf_path }}'"
+          fi
+          if [ "${{ inputs.strict }}" = "true" ]; then
+            CMD="$CMD --fail-on-error"
+          fi
+          # Run the check and capture all output
+          eval $CMD 2>&1 | tee _paper_check_reports/output.txt
+          # Copy the generated markdown report
+          cp *_quality_report.md _paper_check_reports/ 2>/dev/null || true
+          # Extract JSON from output (the report is printed as JSON)
+          python -c "
+import re, sys, json
+text = open('_paper_check_reports/output.txt').read()
+# Find JSON array/object in output
+match = re.search(r'(\{[\s\S]*\"result\"[\s\S]*\})', text)
+if match:
+    try:
+        data = json.loads(match.group(1))
+        json.dump(data, open('_paper_check_reports/report.json', 'w'), indent=2)
+    except:
+        pass
+"
+
+      - name: Publish report to run summary
+        if: always()
+        run: |
+          {
+            echo "## Paper AI Check"
+            echo ""
+            echo "- Repository: \`${{ github.repository }}\`"
+            echo "- Ref: \`${{ github.ref_name }}\`"
+            echo "- Model: \`${{ inputs.model }}\`"
+            echo "- Strict: \`${{ inputs.strict }}\`"
+            echo ""
+            if [ -f "_paper_check_reports/report.json" ]; then
+              echo "### JSON Report"
+              echo '```json'
+              cat "_paper_check_reports/report.json"
+              echo '```'
+            else
+              echo "### Output"
+              echo '```'
+              cat "_paper_check_reports/output.txt"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload AI check reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-ai-check-report
+          path: _paper_check_reports/
