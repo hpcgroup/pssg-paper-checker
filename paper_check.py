@@ -1424,20 +1424,36 @@ def main():
                 markdown_output += "\n"
 
     # LLM section
-    markdown_output += "## LLM Check\n\n"
+    markdown_output += "## LLM Evaluation\n\n"
     if not llm_checks:
         markdown_output += "No LLM checks were executed.\n\n"
     else:
         for check_name, check_data in llm_checks:
-            markdown_output += f"### {check_name}\n\n"
+            check_title = check_name.replace("LLM_", "").replace("_", " ").title()
+            markdown_output += f"### {check_title}\n\n"
+
             if isinstance(check_data, dict):
                 for section, section_data in check_data.items():
                     if isinstance(section_data, dict):
                         markdown_output += f"#### {section}\n\n"
                         for key, value in section_data.items():
-                            markdown_output += f"**{key}**: {value}\n\n"
-                    else:
-                        markdown_output += f"**{section}**: {section_data}\n\n"
+                            if isinstance(value, str) and (
+                                "Pass" in value or "Fail" in value
+                            ):
+                                assessment = (
+                                    "✅ Pass"
+                                    if "Pass" in value and "Fail" not in value
+                                    else "❌ Fail"
+                                )
+                                markdown_output += f"- **{key}**: {assessment}\n"
+                            else:
+                                markdown_output += f"- **{key}**: {value}\n"
+                        markdown_output += "\n"
+                    elif isinstance(section_data, str):
+                        if section_data.startswith("**"):
+                            markdown_output += f"#### {section}\n\n{section_data}\n\n"
+                        else:
+                            markdown_output += f"#### {section}\n\n{section_data}\n\n"
             else:
                 markdown_output += f"{check_data}\n\n"
 
