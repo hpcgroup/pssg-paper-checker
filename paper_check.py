@@ -1446,9 +1446,12 @@ def main():
         markdown_output += f"## {check_name}\n\n{check_data}\n\n"
 
     # Write the markdown report to a file
-    report_filename = (
-        os.path.splitext(os.path.basename(args.pdf))[0] + "_quality_report.md"
-    )
+    if args.pdf:
+        report_filename = (
+            os.path.splitext(os.path.basename(args.pdf))[0] + "_quality_report.md"
+        )
+    else:
+        report_filename = "paper_quality_report.md"
     with open(report_filename, "w", encoding="utf-8") as f:
         f.write(markdown_output)
 
