@@ -7,7 +7,7 @@ on:
         description: "Ref (branch/tag/SHA) of pssg-paper-checker to run"
         required: false
         type: string
-        default: "ai-check"
+        default: "ai-check-workflow"
       latex_root:
         description: "LaTeX project root in caller repository"
         required: false
