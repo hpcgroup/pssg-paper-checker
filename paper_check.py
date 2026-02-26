@@ -942,7 +942,7 @@ class ChecklistEvaluator:
             return True
 
     # ---------------- LLM Checks ----------------
-    def call_llm(self, prompt, max_tokens=2000):
+    def call_llm(self, prompt, max_tokens=32000):
         """Dispatch a text-only prompt to the configured LLM provider."""
         if self.skip_llm:
             return "LLM checks skipped."
