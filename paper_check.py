@@ -54,6 +54,15 @@ class ChecklistEvaluator:
             if not line.lstrip().startswith('%')
         )
 
+    @staticmethod
+    def _remove_latex_environment_blocks(text, *environment_names):
+        """Remove full LaTeX \\begin{env}...\\end{env} blocks for each given environment name."""
+        out = text
+        for environment_name in environment_names:
+            pattern = rf'\\begin\{{{re.escape(environment_name)}\}}.*?\\end\{{{re.escape(environment_name)}\}}'
+            out = re.sub(pattern, '', out, flags=re.DOTALL)
+        return out
+
     def _register_file_text(self, file_path, content):
         """Record comment-stripped LaTeX content for per-file static checks."""
         abs_path = os.path.abspath(file_path)
@@ -661,13 +670,19 @@ class ChecklistEvaluator:
         return issues
 
     def static_check_numbers_spelling(self):
-        """Check if numbers less than 10 appearing alone are spelled out as words, per source file."""
+        """Check if numbers less than 10 appearing alone are spelled out as words, per source file.
+
+        Ignores digits inside \\begin{equation} / equation* / align / align* ... \\end{...} blocks.
+        """
         issues = []
         failed_messages = []
         pattern = r'(?<!\S)([1-9])(?!\S)'
 
         for rel_path, content in self._iterate_latex_files():
-            matches = list(re.finditer(pattern, content))
+            content_without_display_math = self._remove_latex_environment_blocks(
+                content, "equation", "equation*", "align", "align*"
+            )
+            matches = list(re.finditer(pattern, content_without_display_math))
             if not matches:
                 continue
 
@@ -676,8 +691,8 @@ class ChecklistEvaluator:
 
             for match in matches:
                 start = max(0, match.start() - 30)
-                end = min(len(content), match.end() + 30)
-                context = content[start:end]
+                end = min(len(content_without_display_math), match.end() + 30)
+                context = content_without_display_math[start:end]
                 failed_messages.append(f"{rel_path}: Number '{match.group(0)}' appears in: '...{context}...'")
 
         result = {
