@@ -139,24 +139,24 @@ class ChecklistEvaluator:
         paper_path = os.path.join(directory, "paper.tex")
         if not os.path.exists(paper_path):
             raise FileNotFoundError("paper.tex file not found in directory.")
-        
+
         print(f"Starting to process LaTeX file: {paper_path}")
-        
+
         # Track processed files to prevent circular references
         processed_files = set()
-        
+
         def process_input_commands(file_path, current_directory):
             # If file has been processed, prevent circular references
             abs_file_path = os.path.abspath(file_path)
             if abs_file_path in processed_files:
                 print(f"Warning: Circular reference detected for {file_path}, skipping")
                 return f"% Circular reference: {file_path} has been ignored"
-            
+
             # Mark file as processed
             processed_files.add(abs_file_path)
-            
+
             print(f"Processing file: {file_path}")
-            
+
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     original_content = f.read()
@@ -165,28 +165,28 @@ class ChecklistEvaluator:
                 content = self._remove_comment_only_lines(original_content)
                 self._register_file_text(file_path, content)
                 # print(f"  Removed {len(content_lines) - len(non_comment_lines)} comment lines from file {file_path}")
-                
+
             except Exception as e:
                 print(f"Error: Failed to read file {file_path}: {str(e)}")
                 return f"% File reading error: {file_path}"
-            
+
             # Recursively process all \input commands
             def replace_input(match):
                 input_file = match.group(1).strip()
                 print(f"  Found input command: \\input{{{input_file}}}")
-                
+
                 # Add extension (if not present)
                 if not os.path.splitext(input_file)[1]:
                     input_file += ".tex"
-                
+
                 # Build complete path for the referenced file
                 # First try path relative to current file
                 input_path = os.path.join(current_directory, input_file)
-                
+
                 if not os.path.exists(input_path):
                     # If relative path doesn't exist, try path relative to original directory
                     input_path = os.path.join(directory, input_file)
-                
+
                 if os.path.exists(input_path):
                     print(f"  Loading file: {input_path}")
                     # Recursively process referenced file
@@ -196,12 +196,12 @@ class ChecklistEvaluator:
                 else:
                     print(f"Warning: Referenced file not found {input_path}")
                     return f"% Referenced file not found: {input_file}"
-            
+
             # Replace all \input commands
             processed_content = re.sub(r'\\input\{([^}]+)\}', replace_input, content)
             print(f"Completed processing file: {file_path}")
             return processed_content
-        
+
         # Start processing from paper.tex
         result = process_input_commands(paper_path, directory)
         print(f"LaTeX processing complete, merged text length: {len(result)} characters")
@@ -219,22 +219,22 @@ class ChecklistEvaluator:
         abstract_match = re.search(r'\\begin\{abstract\}(.*?)\\end\{abstract\}', latex_text, re.DOTALL)
         if abstract_match:
             sections["abstract"] = abstract_match.group(1).strip()
-        
+
         # Extract main sections
         section_matches = re.findall(r'\\section\{(.+?)\}(.*?)(?=\\section|\\end\{document\})', latex_text, re.DOTALL)
         for title, content in section_matches:
             sections[title.strip()] = content.strip()
-            
+
         # Extract subsections (optional, enable as needed)
         # subsection_matches = re.findall(r'\\subsection\{(.+?)\}(.*?)(?=\\subsection|\\section|\\end\{document\})', latex_text, re.DOTALL)
         # for title, content in subsection_matches:
         #     sections["sub:" + title.strip()] = content.strip()
-            
+
         # Extract subsubsections (optional, enable as needed)
         # subsubsection_matches = re.findall(r'\\subsubsection\{(.+?)\}(.*?)(?=\\subsubsection|\\subsection|\\section|\\end\{document\})', latex_text, re.DOTALL)
         # for title, content in subsubsection_matches:
         #     sections["subsub:" + title.strip()] = content.strip()
-        
+
         return sections
 
     # ---------------- Static Checks ----------------
@@ -256,26 +256,26 @@ class ChecklistEvaluator:
         title_matches = re.findall(r'\\(section|subsection|subsubsection)\{(.+?)\}', self.latex_text)
         # Extract actual title text from matches
         titles = [match[1] for match in title_matches]
-        
+
         # Define a list of common single-word titles that don't need checking
         excluded_titles = ["Introduction", "Background", "Conclusion", "Motivation", "Abstract", "Related Work", "Discussion", "Results" "Appendix"]
-        
+
         issues = []
         problematic_titles = []
         for title in titles:
             # Skip commands or markers starting with backslash
             if title.strip().startswith('\\'):
                 continue
-                
+
             # Skip titles in the exclusion list
             if title.strip() in excluded_titles:
                 continue
-                
+
             words = title.split()
             if len(words) == 1:
                 issues.append(f"Section title '{title}' has only one word.")
                 problematic_titles.append(title)
-                
+
         result = {
             'check': 'Section title descriptiveness',
             'result': (len(issues) == 0),
@@ -289,7 +289,7 @@ class ChecklistEvaluator:
         """Check if all section titles have consistent capitalization (either all capitalized or all lowercase)"""
         # Modify regex to capture different section level titles
         title_matches = re.findall(r'\\(section|subsection|subsubsection)\{(.+?)\}', self.latex_text)
-        
+
         if not title_matches:
             result = {
                 'check': 'Section title capitalization',
@@ -302,7 +302,7 @@ class ChecklistEvaluator:
 
         # Extract actual title text from matches (second element of tuple) and filter out commands
         titles = [match[1] for match in title_matches if not match[1].strip().startswith('\\')]
-        
+
         if not titles:
             result = {
                 'check': 'Section title capitalization',
@@ -312,7 +312,7 @@ class ChecklistEvaluator:
             }
             self.report['section_titles_capitalization'] = result
             return False
-        
+
         # Define a list of words that should typically be lowercase in titles
         lowercase_words = {
             # Articles
@@ -328,32 +328,49 @@ class ChecklistEvaluator:
             'but', 'down', 'less', 'out', 'than', 'through',
             'save', 'per', 'plus'
         }
-        
+
+        def is_latex_command_word(word):
+            """True if this token is a LaTeX command (after optional leading brackets/parens)."""
+            if not word:
+                return False
+            return word.lstrip('([{"\'').startswith('\\')
+
+        def _title_text_words(words):
+            """Words to check for title case, excluding LaTeX commands and pure punctuation/numbers."""
+            text_words = []
+            for word in words:
+                if not word or is_latex_command_word(word):
+                    continue
+
+                # Ignore punctuation and pure numbers
+                word_clean = ''.join(c for c in word if c.isalnum())
+                if not word_clean or word_clean.isdigit():
+                    continue
+                text_words.append((word, word_clean))
+            return text_words
+
+        def apply_last_word_capital_rule(raw_words):
+            """Title-case 'last word capitalized' applies only if the title does not end on a LaTeX command."""
+            if not raw_words:
+                return False
+            return not is_latex_command_word(raw_words[-1])
+
         def analyze_title_part(s, is_first_part=True):
             """Analyze title part, return a list of capitalization errors"""
-            words = s.split()
+            raw_words = s.split()
+            text_words = _title_text_words(raw_words)
             errors = []
-            
-            for i, word in enumerate(words):
-                if not word:
-                    continue
-                
-                # Ignore punctuation
-                word_clean = ''.join(c for c in word if c.isalnum())
-                if not word_clean:
-                    continue
-                
-                # Skip words that are pure numbers
-                if word_clean.isdigit():
-                    continue
-                
-                # First word should always be capitalized
-                if i == 0:
+            n = len(text_words)
+            last_word_rule = is_first_part and apply_last_word_capital_rule(raw_words)
+
+            for j, (word, word_clean) in enumerate(text_words):
+                # First text word should always be capitalized unless it is a LaTeX command
+                if j == 0 and not is_latex_command_word(raw_words[0]):
                     if not word_clean[0].isupper():
                         correct_word = word_clean[0].upper() + word_clean[1:]
                         errors.append(f"'{word}' should be capitalized as '{correct_word}'")
-                # Last word should also be capitalized, but only if it's the first part or the entire title
-                elif i == len(words) - 1 and is_first_part:
+                # Last text word is capitalized only when this part truly ends with that word (not a trailing \\cmd)
+                elif j == n - 1 and last_word_rule:
                     if not word_clean[0].isupper():
                         correct_word = word_clean[0].upper() + word_clean[1:]
                         errors.append(f"'{word}' should be capitalized as '{correct_word}'")
@@ -362,12 +379,12 @@ class ChecklistEvaluator:
                     correct_word = word_clean[0].upper() + word_clean[1:]
                     errors.append(f"'{word}' should be capitalized as '{correct_word}'")
                 # Check words that should be lowercase but are capitalized
-                elif word_clean.lower() in lowercase_words and word_clean[0].isupper() and i != 0:
+                elif word_clean.lower() in lowercase_words and word_clean[0].isupper() and j != 0:
                     correct_word = word_clean.lower()
                     errors.append(f"'{word}' should be lowercase as '{correct_word}'")
-            
+
             return errors
-        
+
         def is_title_case(s):
             """Check if title follows title case format, handling colon-separated cases"""
             # If there's a colon, split the title into multiple parts and check each
@@ -383,51 +400,41 @@ class ChecklistEvaluator:
             else:
                 # No colon case, check directly
                 return is_title_part_case(s)
-        
+
         def is_title_part_case(s, is_first_part=True):
             """Check if a part of the title follows title case format"""
-            words = s.split()
-            if not words:
+            raw_words = s.split()
+            text_words = _title_text_words(raw_words)
+            if not text_words:
                 return True
-            
+
             incorrect_case_words = []
-            
-            # Check each word, excluding common lowercase words and numbers
-            for i, word in enumerate(words):
-                if not word:
-                    continue
-                
-                # Ignore punctuation
-                word_clean = ''.join(c for c in word if c.isalnum())
-                if not word_clean:
-                    continue
-                
-                # Skip words that are pure numbers
-                if word_clean.isdigit():
-                    continue
-                
-                # First word should always be capitalized
-                if i == 0:
+            n = len(text_words)
+            last_word_rule = is_first_part and apply_last_word_capital_rule(raw_words)
+
+            for j, (word, word_clean) in enumerate(text_words):
+                # First text word should always be capitalized
+                if j == 0:
                     if not word_clean[0].isupper():
                         incorrect_case_words.append((word, True))  # True means should be capitalized
-                # Last word should also be capitalized, but only if it's the first part or the entire title
-                elif i == len(words) - 1 and is_first_part:
+                # Last text word is capitalized only when this part truly ends with that word (not a trailing \\cmd)
+                elif j == n - 1 and last_word_rule:
                     if not word_clean[0].isupper():
                         incorrect_case_words.append((word, True))  # True means should be capitalized
                 # For other words, if not in lowercase words list, should be capitalized
                 elif word_clean.lower() not in lowercase_words and not word_clean[0].isupper():
                     incorrect_case_words.append((word, True))  # True means should be capitalized
                 # Check words that should be lowercase but are capitalized
-                elif word_clean.lower() in lowercase_words and word_clean[0].isupper() and i != 0:
+                elif word_clean.lower() in lowercase_words and word_clean[0].isupper() and j != 0:
                     incorrect_case_words.append((word, False))  # False means should be lowercase
-            
+
             return len(incorrect_case_words) == 0
 
         # Analyze each title, collect error information
         title_errors = {}
         for title in titles:
             errors = []
-            
+
             # If there's a colon, split the title into multiple parts and check each
             if ':' in title:
                 parts = title.split(':')
@@ -440,16 +447,16 @@ class ChecklistEvaluator:
             else:
                 # No colon case, check directly
                 errors = analyze_title_part(title)
-            
+
             if errors:
                 title_errors[title] = errors
-        
+
         # Check if consistent capitalization style is used (title case or all lowercase)
         title_case_count = sum(1 for title in titles if is_title_case(title))
         lowercase_count = sum(1 for title in titles if title.lower() == title)
-        
+
         is_consistent = (title_case_count == len(titles)) or (lowercase_count == len(titles))
-        
+
         if is_consistent and not title_errors:
             detail = "All section titles have consistent and correct capitalization."
             res = True
@@ -465,24 +472,24 @@ class ChecklistEvaluator:
                 # Most are lowercase, find those that don't conform
                 inconsistent_titles = [title for title in titles if title.lower() != title]
                 preferred_style = "lowercase"
-            
+
             if title_errors:
                 error_details = []
                 for title, errors in title_errors.items():
                     error_details.append(f"Capitalization issues in title '{title}':")
                     for error in errors:
                         error_details.append(f"  - {error}")
-                
+
                 detail = f"Section titles have capitalization issues. Recommended style: {preferred_style}.\nDetailed errors: " + "\n".join(error_details)
             else:
                 detail = f"Section titles have inconsistent capitalization. Recommended style: {preferred_style}."
-            
+
             res = False
             failed_content = {
                 "inconsistent_titles": inconsistent_titles if inconsistent_titles else [],
                 "title_errors": title_errors
             }
-            
+
         result = {
             'check': 'Section title capitalization',
             'result': res,
@@ -497,55 +504,55 @@ class ChecklistEvaluator:
         # Get all section and subsection commands and their positions in the text
         section_pattern = r'\\(section|subsection|subsubsection)\{(.+?)\}'
         section_matches = []
-        
+
         for match in re.finditer(section_pattern, self.latex_text):
             section_type = match.group(1)  # section, subsection or subsubsection
             section_title = match.group(2)  # section title
             position = match.start()  # position in the original text
             section_matches.append((section_type, section_title, position))
-        
+
         # Sort by position in the original text
         section_matches.sort(key=lambda x: x[2])
-        
+
         issues = []
         problematic_sections = []
-        
+
         # Check if there are sections directly followed by subsections without content buffer
         for i in range(len(section_matches) - 1):
             current_level = section_matches[i][0]
             next_level = section_matches[i+1][0]
             current_title = section_matches[i][1]
             next_title = section_matches[i+1][1]
-            
+
             # Only check if section is directly followed by subsection or subsection is directly followed by subsubsection
             if (current_level == 'section' and next_level == 'subsection') or \
                (current_level == 'subsection' and next_level == 'subsubsection'):
-                
+
                 # Calculate the text between the two tags
                 current_pos = section_matches[i][2]
                 next_pos = section_matches[i+1][2]
-                
+
                 # Find the end position of the current section title (i.e., the position after the closing brace)
                 section_start_match = re.search(r'\{' + re.escape(current_title) + r'\}', self.latex_text[current_pos:])
                 if section_start_match:
                     content_start = current_pos + section_start_match.end()
-                    
+
                     # Extract the text between the two tags
                     between_text = self.latex_text[content_start:next_pos].strip()
-                    
+
                     # Ignore text that only contains labels, such as \label{...}
                     between_text_no_labels = re.sub(r'\\label\{[^}]*\}', '', between_text).strip()
-                    
+
                     # If there is only whitespace or only labels between the tags, consider there is no introductory text
                     if len(between_text_no_labels) < 10:
                         if current_level == 'section':
                             issue = f"Section '{current_title}' is directly followed by subsection '{next_title}' without introductory text."
                         else:
                             issue = f"Subsection '{current_title}' is directly followed by subsubsection '{next_title}' without introductory text."
-                        
+
                         issues.append(issue)
                         problematic_sections.append(f"{current_title} -> {next_title}")
-                
+
         result = {
             'check': 'Section Buffer Check',
             'result': (len(issues) == 0),
@@ -742,10 +749,10 @@ class ChecklistEvaluator:
         text = re.sub(r'\\[a-zA-Z]+\{.*?\}', '', self.latex_text)
         tool = language_tool_python.LanguageTool('en-US')
         matches = tool.check(text)
-        
+
         issues = []
         spelling_errors = []
-        
+
         for m in matches:
             issues.append(m.message)
             context = text[max(0, m.offset-30):min(len(text), m.offset+m.errorLength+30)]
@@ -756,7 +763,7 @@ class ChecklistEvaluator:
                 'context': f"'...{context}...'",
                 'suggestions': m.replacements[:3] if m.replacements else []
             })
-            
+
         result = {
             'check': 'Spell Check',
             'result': (len(issues) == 0),
@@ -769,10 +776,10 @@ class ChecklistEvaluator:
     def static_check_italics_usage(self):
         """Simple check for italics usage to determine if overused"""
         italic_count = len(re.findall(r'\\textit\{', self.latex_text))
-        
+
         # Find all italic text
         italic_texts = re.findall(r'\\textit\{(.*?)\}', self.latex_text)
-        
+
         if italic_count > 5:
             result = {
                 'check': 'Italics Usage',
@@ -1005,18 +1012,18 @@ The content of section "{section_title}" is as follows:
 
         images = convert_from_path(self.pdf_path)
         results = {}
-    
+
         # Create temp directory to save images
         with tempfile.TemporaryDirectory() as temp_dir:
             for i, image in enumerate(images):
                 # Save the image temporarily
                 image_path = f"{temp_dir}/page_{i+1}.png"
                 image.save(image_path)
-                
+
                 # Encode image to base64
                 with open(image_path, "rb") as image_file:
                     base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-                
+
                 # Prepare prompt for figure evaluation
                 prompt = f"""Please evaluate the quality of figures on page {i+1} of the PDF, identify any issues and provide suggestions for improvement. If there are no figures on the page, please indicate this.
 1. Do the figures use a consistent style?
@@ -1027,7 +1034,7 @@ The content of section "{section_title}" is as follows:
 6. Figure captions should be detailed, mention machine (if multiple machines are used), number of processes/cores/GPUs (if that is not clear from the figure)
 7. Figures/tables must be referenced in the text and the text should tell the reader how to read it and what to take away from it
 8. Figures should appear right after (using [h]) where they are mentioned (in most cases except layout issues)"""
-                
+
                 try:
                     # Store the result from the configured multimodal model
                     results[f"page_{i+1}"] = self.call_vision_llm(prompt, base64_image)
@@ -1048,8 +1055,8 @@ The content of section "{section_title}" is as follows:
         self.static_check_numbers_spelling()
         self.static_check_informal_words()
         self.static_check_italics_usage()
-        
-        
+
+
         # Currently unable to handle latex format, will report a large number of spelling errors
         # self.static_spell_check()
 
@@ -1065,7 +1072,7 @@ The content of section "{section_title}" is as follows:
             for section_title, section_content in self.sections.items():
                 result = self.llm_evaluate_writing_for_section(section_title, section_content)
                 llm_writing_results[section_title] = result
-                
+
             self.report['LLM_Writing'] = llm_writing_results
         else:
             skip_message = "LLM checks skipped."
@@ -1131,7 +1138,7 @@ def main():
             llm_checks.append((check_name, check_data))
         else:
             other_entries.append((check_name, check_data))
-    
+
     # Save the report as a markdown document
     markdown_output = "# Paper Quality Check Report\n\n"
 
@@ -1195,7 +1202,7 @@ def main():
     # Any other entries
     for check_name, check_data in other_entries:
         markdown_output += f"## {check_name}\n\n{check_data}\n\n"
-    
+
     # Write the markdown report to a file
     report_filename = os.path.splitext(os.path.basename(args.pdf))[0] + "_quality_report.md"
     with open(report_filename, 'w', encoding='utf-8') as f:
@@ -1203,17 +1210,17 @@ def main():
 
     # Output the check report in JSON format, highlighting failed checks and their error content
     print(json.dumps(report, indent=2, ensure_ascii=False))
-    
+
     print("\n=== Detailed Report of Failed Checks ===")
     for check_name, check_data in report.items():
         if isinstance(check_data, dict) and 'result' in check_data and check_data['result'] is False:
             print(f"\n[❌] {check_data.get('check', check_name)}:")
             print(f"   Details: {check_data.get('detail', 'No detailed information')}")
-            
+
             if 'failed_content' in check_data and check_data['failed_content']:
                 print("   Error content:")
                 failed_content = check_data['failed_content']
-                
+
                 if isinstance(failed_content, list):
                     for i, item in enumerate(failed_content, 1):
                         print(f"   {i}. {item}")
